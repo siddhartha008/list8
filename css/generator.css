@@ -1,0 +1,90 @@
+/* generator.css */
+#generator-screen {
+    background: #E4B7A0; /* Peach */
+    padding: 2rem;
+    border-radius: 15px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    width: 90%;
+    max-width: 400px;
+    text-align: center;
+    animation: slideIn 1s ease-in-out;
+}
+
+@keyframes slideIn {
+    from { opacity: 0; transform: translateX(-20px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+.number-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin: 1.5rem 0;
+}
+
+.number-input {
+    width: 20%;
+    padding: 0.75rem;
+    margin: 0.75rem;
+    background: #F6EEE0; /* Cream */
+    border: 2px solid #A45C40; /* Desert Sun */
+    border-radius: 8px;
+    color: #A45C40; /* Desert Sun */
+    font-size: 1rem;
+    text-align: center;
+    transition: border-color 0.3s ease, transform 0.3s ease;
+}
+
+.number-input:focus {
+    border-color: #C38370; /* Coral */
+    transform: scale(1.05);
+}
+
+#add-elements {
+    margin-top: 1.5rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+#add-elements input {
+    width: 60%;
+    padding: 0.75rem;
+    background: #F6EEE0; /* Cream */
+    border: 2px solid #A45C40; /* Desert Sun */
+    border-radius: 8px;
+    color: #A45C40; /* Desert Sun */
+    font-size: 1rem;
+    text-align: center;
+    transition: border-color 0.3s ease, transform 0.3s ease;
+}
+
+#add-elements input:focus {
+    border-color: #C38370; /* Coral */
+    transform: scale(1.05);
+}
+
+#add-elements button {
+    width: 30%;
+    padding: 0.75rem;
+    background: #C38370; /* Coral */
+    color: #F6EEE0; /* Cream */
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background-color 0.3s ease, transform 0.3s ease;
+}
+
+#add-elements button:hover {
+    background: #A45C40; /* Desert Sun */
+    transform: translateY(-3px);
+}
+
+#current-list {
+    font-weight: bold;
+    color: #A45C40; /* Desert Sun */
+    font-size: 1.2rem;
+    animation: fadeIn 1s ease-in-out;
+}

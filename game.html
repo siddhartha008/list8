@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>LIST8 - Game</title>
+    <link rel="stylesheet" href="css/index.css">
+    <link rel="stylesheet" href="css/generator.css">
+    <link rel="stylesheet" href="css/guesser.css">
+    <script src="game.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/uuid@8.3.2/dist/umd/uuid.min.js"></script>
+</head>
+
+<body>
+    <div id="game-screen">
+        <h1>LIST8</h1>
+        <div id="role-selection">
+            <h2>Select Your Role</h2>
+            <button id="select-generator">Generator</button>
+            <button id="select-guesser">Guesser</button>
+        </div>
+
+        <div id="generator-ui" style="display: none;">
+            <h2>Generator</h2>
+            <input type="number" class="number-input" placeholder="Num1" id="num1" autocomplete="off" required>
+            <input type="number" class="number-input" placeholder="Num2" id="num2" autocomplete="off" required>
+            <input type="number" class="number-input" placeholder="Num3" id="num3" autocomplete="off" required>
+            <input type="number" class="number-input" placeholder="Num4" id="num4" autocomplete="off" required>
+            <button id="submit-list">Generate</button>
+            <p>Current List: <span id="current-list"></span></p>
+            <div id="generatorHideWhenGameOver">
+                <p id="guesserStatus">Guesser is guessing</p>
+                <p>Guessed Elements: <span id="guessed-elements"></span></p>
+                <div id="add-elements" style="display: none;">
+                    <input type="number" placeholder="Add Number" id="add-number1">
+                    <button id="add-button" type="button">Add</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="guesser-ui" style="display: none;">
+            <h2>Guesser</h2>
+            <p id="guesserWaitText" hidden>Waiting for Generator to Generate the List</p>
+            <p id="guesserGameText" hidden>List of 4 Generated. Start Guessing</p>
+            <input type="number" class="number-input" placeholder="Enter Your Guess" id="guess1" min="0" max="9"
+                autocomplete="off" disabled>
+            <button id="submit-guess" disabled>Guess</button>
+        </div>
+
+        <div id="game-state">
+            <p>Remaining Tries: <span id="remaining-tries"></span></p>
+
+        </div>
+
+
+        <div id="game-result">
+            <p><strong><span id="game-result-score"></span></strong></p>
+            <button id="rematch-button">Rematch</button>
+            <button id="quit-button">Quit</button>
+        </div>
+    </div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomId = localStorage.getItem("roomId"); // Retrieve roomId from localStorage
+        const playerRole = localStorage.getItem("playerRole"); // Retrieve player role from localStorage
+
+        if (!roomId) {
+            alert("Room ID not found. Please create or join a room first.");
+            window.location.href = "main.html"; // Redirect to main.html if no roomId is found
+        }
+
+        const ws = new WebSocket("ws://localhost:8080");
+
+        ws.onopen = () => {
+            console.log("Connected to WebSocket server");
+
+            document.getElementById("game-state").hidden = true;
+            document.getElementById("game-result").hidden = true;
+
+            // Retrieve or generate playerId using uuid
+            let playerId = sessionStorage.getItem("playerId");
+            if (!playerId) {
+                playerId = uuid.v4(); // Generate a new UUID if player id doesn't exist
+                sessionStorage.setItem("playerId", playerId);
+            }
+
+            // Notify the server that the player has reconnected
+            ws.send(JSON.stringify({ type: "reconnect", roomId, playerId }));
+        };
+
+        ws.onmessage = (event) => {
+            let data = JSON.parse(event.data);
+
+            if (data.type === 'roleAssigned') {
+                console.log(`Role assigned: ${data.role} by player ${data.playerId}`);
+
+                // Only disable the button for the other player's role
+                if (data.playerId !== sessionStorage.getItem("playerId")) {
+                    if (data.role === 'generator') {
+                        document.getElementById("select-generator").disabled = true;
+                    } else if (data.role === 'guesser') {
+                        document.getElementById("select-guesser").disabled = true;
+                    }
+                }
+            }
+
+            if (data.type === 'rematchRequested') {
+                // Show a confirmation dialog for the other player
+                const confirmRematch = confirm("Your opponent wants to rematch. Do you agree?");
+                if (confirmRematch) {
+                    ws.send(JSON.stringify({ type: "acceptRematch", roomId }));
+                } else {
+                    ws.send(JSON.stringify({ type: "rejectRematch", roomId }));
+                }
+            }
+            if (data.type === 'rematchAccepted') {
+                // Both players agreed to rematch
+                alert("Both players agreed to rematch. The game will now restart.");
+                resetGameUI();
+            }
+
+            if (data.type === 'rematchRejected') {
+                // The other player rejected the rematch request
+                alert("Your opponent did not agree to rematch.");
+            }
+
+
+            if (data.type === 'playerQuit') {
+                alert("Your opponent has quit the game.");
+                window.location.href = "main.html"; // Redirect to main.html
+            }
+
+            if (data.type === 'gameReady') {
+                console.log("Game is ready. Starting game...");
+                document.getElementById("role-selection").style.display = "none";
+                if (sessionStorage.getItem("playerRole") === "generator") {
+                    document.getElementById("generator-ui").style.display = "block";
+                    document.getElementById("game-result").hidden = true;
+                } else if (sessionStorage.getItem("playerRole") === "guesser") {
+                    document.getElementById("guesser-ui").style.display = "block";
+                    document.getElementById("guess1").disabled = false;
+                    document.getElementById("guess1").hidden = true;
+                    document.getElementById("submit-guess").disabled = true;
+                    document.getElementById("guesserWaitText").hidden = false;
+                    document.getElementById("guesserGameText").hidden = true;
+                    document.getElementById("game-state").hidden = true;
+                    document.getElementById("game-result").hidden = true;
+                }
+            }
+
+            if (data.type === 'gameUpdate') {
+                document.getElementById("current-list").textContent = data.currentList.join(', ');
+                document.getElementById("remaining-tries").textContent = data.remainingTries;
+                document.getElementById("game-result").textContent = data.gameResult;
+
+                if (data.gameResult === "Generator Wins" || data.gameResult === "Guesser Wins") {
+                    alert(data.gameResult);
+                }
+            }
+
+            if (data.type === 'listSet') {
+                console.log("Initial list set:", data.numbers);
+                document.getElementById("current-list").textContent = data.numbers.join(', ');
+
+                // Enable guesser's input and button
+                if (sessionStorage.getItem("playerRole") === "guesser") {
+                    document.getElementById("guess1").hidden = false;
+                    document.getElementById("submit-guess").disabled = false;
+                    document.getElementById("guesserWaitText").hidden = true; // Hide the waiting message
+                    document.getElementById("guesserGameText").hidden = false; // Hide the waiting message
+                    document.getElementById("game-state").hidden = false;
+                }
+
+                // Update generator's UI
+                if (sessionStorage.getItem("playerRole") === "generator") {
+                    document.getElementById("num1").style.display = "none";
+                    document.getElementById("num2").style.display = "none";
+                    document.getElementById("num3").style.display = "none";
+                    document.getElementById("num4").style.display = "none";
+                    document.getElementById("submit-list").style.display = "none";
+                }
+            }
+
+            if (data.type === 'resetRoles') {
+                console.log("Resetting roles due to player disconnection.");
+                document.getElementById("select-generator").disabled = false;
+                document.getElementById("select-guesser").disabled = false;
+                document.getElementById("role-selection").style.display = "block";
+                document.getElementById("generator-ui").style.display = "none";
+                document.getElementById("guesser-ui").style.display = "none";
+            }
+
+            if (data.type === 'guessResult') {
+                if (data.gameResult === "Generator Wins" || data.gameResult === "Guesser Wins") {
+                    document.getElementById("game-result").hidden = false;
+                    document.getElementById("guesserGameText").style.display = "none";
+                    document.getElementById("submit-guess").hidden = true;
+                    document.getElementById("guess1").hidden = true;
+                    document.getElementById("game-state").style.display = "none";
+                    document.getElementById("generatorHideWhenGameOver").style.display = "none";
+                    document.getElementById("game-result-score").textContent = data.gameResult;
+
+                    // Show buttons
+                    document.getElementById("rematch-button").style.display = "inline";
+                    document.getElementById("quit-button").style.display = "inline";
+                    // sessionStorage.removeItem("roomId"); // Clear roomId from localStorage
+                    // sessionStorage.removeItem("playerRole"); // Clear player role from localStorage
+                }
+
+
+                if (sessionStorage.getItem("playerRole") === "guesser") {
+                    if (data.gameResult === "Generator Wins") {
+                        document.getElementById("game-result-score").textContent = "YOU GOT LIST-8 (you lost)!";
+                    }
+                    if (data.gameResult === "Guesser Wins") {
+                        document.getElementById("game-result-score").textContent = "YOU LIST-8 THEM (you won)!";
+                    }
+
+                    if (data.result === "correct") {
+                        document.getElementById("guesserGameText").textContent = "Correct Guess. Generator Cannot add an element.";
+                        document.getElementById("guess1").value = "";
+                    } else {
+                        document.getElementById("guess1").hidden = true;
+                        document.getElementById("submit-guess").hidden = true;
+                        document.getElementById("guesserGameText").textContent = "Incorrect Guess. Generator adding an element.";
+                    }
+                }
+
+
+
+
+
+                if (sessionStorage.getItem("playerRole") === "generator") {
+                    if (data.gameResult === "Guesser Wins") {
+                        document.getElementById("game-result-score").textContent = "YOU GOT LIST-8 (you lost)!";
+                    }
+                    if (data.gameResult === "Generator Wins") {
+                        document.getElementById("game-result-score").textContent = "YOU LIST-8 THEM (you won)!";
+                    }
+
+                    document.getElementById("guessed-elements").textContent = data.guess;
+                }
+
+
+
+                // Update the current list and remaining tries
+                document.getElementById("current-list").textContent = data.currentList.join(', ');
+                document.getElementById("remaining-tries").textContent = data.remainingTries;
+            }
+
+            if (data.type === 'error' && data.message === "NUMBER ALREADY IN LIST") {
+                alert("Number is already in the list"); // Show an alert to the generator
+            }
+
+            // if (data.type === 'allowAddElement') {
+            //     if (sessionStorage.getItem("playerRole") === "generator") {
+            //         // Show the "Add Element" UI
+            //         document.getElementById("add-elements").style.display = "block";
+            //         document.getElementById("add-button").addEventListener("click", () => {
+            //             const number = parseInt(document.getElementById("add-number1").value);
+            //             if (isNaN(number) || number < 0 || number > 9) {
+            //                 alert("Invalid number! Enter a number between 0 and 9.");
+            //                 return;
+            //             }
+
+            //             if (!roomId) {
+            //                 console.error(" ERROR: Room ID is missing!");
+            //                 return;
+            //             }
+
+            //             ws.send(JSON.stringify({ type: "addElement", roomId, number }));
+            //             document.getElementById("add-number1").value = ""; // Clear the input field
+            //         });
+            //     }
+            // }
+            if (data.type === 'allowAddElement' &&
+                sessionStorage.getItem("playerRole") === "generator") {
+                document.getElementById("add-elements").style.display = "block";
+            }
+
+            if (data.type === 'listUpdated') {
+                console.log("List updated:", data.currentList);
+                document.getElementById("current-list").textContent = data.currentList.join(', ');
+                document.getElementById("add-elements").style.display = "none";
+
+                // Re-enable guesser's input and button
+                if (sessionStorage.getItem("playerRole") === "guesser") {
+                    document.getElementById("guess1").disabled = false;
+                    document.getElementById("guess1").hidden = false;
+                    document.getElementById("submit-guess").disabled = false;
+                    document.getElementById("guess1").value = "";
+                    document.getElementById("submit-guess").hidden = false;
+                    document.getElementById("guesserGameText").textContent = "List Updated. Continue Guessing.";
+                }
+            }
+
+
+            if (data.gameResult === "Generator Wins" || data.gameResult === "Guesser Wins") {
+                document.getElementById("game-result").hidden = false;
+                document.getElementById("game-result-score").value = data.gameResult;
+                sessionStorage.removeItem("roomId"); // Clear roomId from localStorage
+                sessionStorage.removeItem("playerRole"); // Clear player role from localStorage
+            }
+
+            if (data.type === 'gameResult') {
+                document.getElementById("game-result").hidden = false;
+                document.getElementById("game-result-score").textContent = data.gameResult;
+
+                document.getElementById("rematch-button").style.display = "inline";
+                document.getElementById("quit-button").style.display = "inline";
+            }
+
+
+        };
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const addButton = document.getElementById("add-button");
+            const addNumberInput = document.getElementById("add-number1");
+
+            addButton.addEventListener("click", () => {
+                // 1. Parse the input
+                const number = parseInt(addNumberInput.value);
+
+                // 2. Check valid range
+                if (isNaN(number) || number < 0 || number > 9) {
+                    alert("Invalid number! Enter a number between 0 and 9.");
+                    return;
+                }
+
+                // 3. Check if this number is currently in the list
+                const currentListText = document.getElementById("current-list").textContent;
+                const currentNumbers = currentListText
+                    .split(",")
+                    .map(n => parseInt(n.trim()))
+                    .filter(n => !isNaN(n));
+
+                // If the number is already there, reject
+                if (currentNumbers.includes(number)) {
+                    alert("Number is already in the list");
+                    return;
+                }
+
+                // 4. Otherwise, send to the server
+                if (!roomId) {
+                    console.error("ERROR: Room ID is missing!");
+                    return;
+                }
+                ws.send(JSON.stringify({ type: "addElement", roomId, number }));
+
+                // 5. Clear the input
+                addNumberInput.value = "";
+            });
+        });
+
+        function resetGameUI() {
+            // Reset the game UI to its initial state
+            document.getElementById("game-result").hidden = true;
+            document.getElementById("role-selection").style.display = "none";
+            document.getElementById("generator-ui").style.display = "none";
+            document.getElementById("guesser-ui").style.display = "none";
+            document.getElementById("current-list").textContent = "";
+            document.getElementById("remaining-tries").textContent = "";
+            document.getElementById("game-result-score").textContent = "";
+            document.getElementById("rematch-button").style.display = "none";
+            document.getElementById("quit-button").style.display = "none";
+            window.location.href = "game.html";
+        }
+
+        document.getElementById("rematch-button").addEventListener("click", () => {
+            ws.send(JSON.stringify({ type: "requestRematch", roomId }));
+        });
+
+
+        // Handle quit button click
+        document.getElementById("quit-button").addEventListener("click", () => {
+            ws.send(JSON.stringify({ type: "quit", roomId }));
+            window.location.href = "main.html";
+        });
+
+
+        // Handle role selection
+        document.getElementById("select-generator").addEventListener("click", () => {
+            const role = 'generator';
+            sessionStorage.setItem("playerRole", role); // Store role in localStorage
+            ws.send(JSON.stringify({ type: "selectRole", roomId, role }));
+            document.getElementById("select-guesser").disabled = true; // Disable the other role button for the current player
+        });
+
+        document.getElementById("select-guesser").addEventListener("click", () => {
+            const role = 'guesser';
+            sessionStorage.setItem("playerRole", role); // Store role in localStorage
+            ws.send(JSON.stringify({ type: "selectRole", roomId, role }));
+            document.getElementById("select-generator").disabled = true; // Disable the other role button for the current player
+        });
+
+        document.getElementById("submit-list").addEventListener("click", () => {
+            const num1 = parseInt(document.getElementById("num1").value);
+            const num2 = parseInt(document.getElementById("num2").value);
+            const num3 = parseInt(document.getElementById("num3").value);
+            const num4 = parseInt(document.getElementById("num4").value);
+
+            // Create an array of the numbers
+            const numbers = [num1, num2, num3, num4];
+
+            if (numbers.some(num => isNaN(num) || num < 0 || num > 9)) {
+                alert("All numbers must be between 0 and 9.");
+                return;
+            }
+
+            if (new Set(numbers).size !== 4) {
+                alert("All numbers must be unique.");
+                return;
+            }
+
+            if (numbers.length !== 4) {
+                alert("You must enter exactly 4 numbers.");
+                return;
+            }
+
+            ws.send(JSON.stringify({ type: "setInitialList", roomId, numbers }));
+        });
+
+
+
+
+        document.getElementById("submit-guess").addEventListener("click", () => {
+            const guess = parseInt(document.getElementById("guess1").value);
+            if (isNaN(guess) || guess < 0 || guess > 9) {
+                alert("Enter a valid number between 0 and 9.");
+                return;
+            }
+
+            ws.send(JSON.stringify({ type: "guess", roomId, guess }));
+        });
+    </script>
+</body>
+
+</html>

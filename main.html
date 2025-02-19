@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>LIST8 - Main</title>
+    <link rel="stylesheet" href="css/index.css">
+</head>
+
+<body>
+    <div>
+        <h1>LIST8</h1>
+        <button id="create-room">Create a Room</button>
+    </div>
+
+    <div id="room-code-container" style="display: none;">
+        <p>Room Code:</p>
+        <p id="room-code"></p>
+        <p>Share this code with your friend to join the room.</p>
+    </div>
+
+    <div>
+        <form>
+            <input type="text" id="room-id" placeholder="Enter room code" class="roomjoin" maxlength="6">
+            <button id="join-room">Join</button>
+        </form>
+    </div>
+
+    <p id="room-status"></p>
+
+    <script>
+        const ws = new WebSocket("ws://localhost:8080");
+
+        ws.onopen = () => {
+            console.log("Connected to WebSocket server");
+        };
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            if (data.type === 'roomCreated') {
+                document.getElementById("room-code").textContent = data.roomId;
+                document.getElementById("room-code-container").style.display = "block";
+                document.getElementById("room-status").textContent = "Waiting for another player to join...";
+            }
+
+            if (data.type === 'roomReady') {
+                window.location.href = "game.html";
+            }
+
+            if (data.type === 'roomFull') {
+                alert("Room is full. Please create a new room or join another.");
+            }
+        };
+
+        document.getElementById("create-room").addEventListener("click", () => {
+            const roomId = generateRoomId(); // Generate a unique room ID
+            localStorage.setItem("roomId", roomId); // Store roomId in localStorage
+            ws.send(JSON.stringify({ type: "createRoom", roomId })); // Send roomId to the server
+            console.log("Sent createRoom message with roomId:", roomId);
+        });
+
+        document.getElementById("join-room").addEventListener("click", (e) => {
+            e.preventDefault();
+            const roomId = document.getElementById("room-id").value.trim();
+            if (roomId) {
+                ws.send(JSON.stringify({ type: "joinRoom", roomId }));
+            } else {
+                alert("Please enter a valid room ID.");
+            }
+        });
+
+        // Helper function to generate a room ID
+        function generateRoomId() {
+            return Math.random().toString(36).substring(2, 8).toUpperCase();
+        }
+    </script>
+</body>
+
+</html>
